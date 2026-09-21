@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { startSpotifyLogin, isSpotifyConnected, searchTracks, type SpotifyTrackSummary } from '../lib/spotify';
 
 export function MusicPage() {
-  const [connected, setConnected] = useState(isSpotifyConnected());
+  // Đã xóa bỏ setConnected thừa ở đây để hết lỗi build
+  const [connected] = useState(isSpotifyConnected());
   const [query, setQuery] = useState('');
   const [tracks, setTracks] = useState<SpotifyTrackSummary[]>([]);
   const [loading, setLoading] = useState(false);
