@@ -7,7 +7,7 @@ export interface YouTubeVideoSummary {
   thumbnail: string;
 }
 
-export align async function searchVideos(query: string): Promise<YouTubeVideoSummary[]> {
+export async function searchVideos(query: string): Promise<YouTubeVideoSummary[]> {
   const qs = new URLSearchParams({
     part: 'snippet',
     type: 'video',
