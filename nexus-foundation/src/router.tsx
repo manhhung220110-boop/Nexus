@@ -42,7 +42,7 @@ export const router = createBrowserRouter([
     path: '/auth/callback',
     element: <OAuthCallbackPage />,
   },
-  protectedRoute('/home', <HomePage Heck />),
+  protectedRoute('/home', <HomePage />),
   protectedRoute('/messages', <ComingSoonPage title="Tin nhắn" />),
   protectedRoute('/music', <ComingSoonPage title="Âm nhạc" />),
   protectedRoute('/watch', <ComingSoonPage title="Video" />),
