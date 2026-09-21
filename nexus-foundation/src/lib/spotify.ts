@@ -88,52 +88,53 @@ export async function completeSpotifyLogin(code: string) {
     scope: string
   }>
 }
-const TOKEN_KEY = 'nexus_spotify_access_token';
-const TOKEN_EXPIRY_KEY = 'nexus_spotify_token_expiry';
+
+const TOKEN_KEY = 'nexus_spotify_access_token'
+const TOKEN_EXPIRY_KEY = 'nexus_spotify_token_expiry'
 
 export function saveSpotifyToken(accessToken: string, expiresIn: number) {
-  sessionStorage.setItem(TOKEN_KEY, accessToken);
-  sessionStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + expiresIn * 1000));
+  sessionStorage.setItem(TOKEN_KEY, accessToken)
+  sessionStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + expiresIn * 1000))
 }
 
 export function getSpotifyAccessToken(): string | null {
-  const token = sessionStorage.getItem(TOKEN_KEY);
-  const expiry = Number(sessionStorage.getItem(TOKEN_EXPIRY_KEY) ?? 0);
-  if (!token || Date.now() > expiry) return null;
-  return token;
+  const token = sessionStorage.getItem(TOKEN_KEY)
+  const expiry = Number(sessionStorage.getItem(TOKEN_EXPIRY_KEY) ?? 0)
+  if (!token || Date.now() > expiry) return null
+  return token
 }
 
 export function isSpotifyConnected(): boolean {
-  return getSpotifyAccessToken() !== null;
+  return getSpotifyAccessToken() !== null
 }
 
 export interface SpotifyTrackSummary {
-  id: string;
-  name: string;
-  artists: string;
-  albumImage: string;
+  id: string
+  name: string
+  artists: string
+  albumImage: string
 }
 
-export align async function searchTracks(query: string): Promise<SpotifyTrackSummary[]> {
-  const token = getSpotifyAccessToken();
-  if (!token) throw new Error('Chưa kết nối Spotify');
+export async function searchTracks(query: string): Promise<SpotifyTrackSummary[]> {
+  const token = getSpotifyAccessToken()
+  if (!token) throw new Error('Chưa kết nối Spotify')
 
   const qs = new URLSearchParams({
     q: query,
     type: 'track',
     limit: '10',
-  });
+  })
 
-  const res = await fetch(`https://spotify.com{qs.toString()}`, {
+  const res = await fetch(`https://api.spotify.com/v1/search?${qs.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`Spotify search failed: ${res.status}`);
+  })
+  if (!res.ok) throw new Error(`Spotify search failed: ${res.status}`)
 
-  const data = await res.json();
+  const data = await res.json()
   return (data.tracks?.items ?? []).map((t: any) => ({
     id: t.id,
     name: t.name,
     artists: t.artists.map((a: any) => a.name).join(', '),
     albumImage: t.album.images?.[1]?.url ?? t.album.images?.[0]?.url,
-  }));
+  }))
 }
