@@ -1,0 +1,17 @@
+name = "nexus-youtube-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+
+[vars]
+ALLOWED_ORIGIN = "http://127.0.0.1:5173"
+
+# Never put YT_API_KEY here — it would get committed to git.
+# After `wrangler login`, run:
+#   wrangler secret put YT_API_KEY
+# and paste the key when prompted. Set a production ALLOWED_ORIGIN
+# override with `wrangler deploy --var ALLOWED_ORIGIN:https://your-domain`
+# or per-environment sections below.
+
+[env.production]
+name = "nexus-youtube-proxy"
+vars = { ALLOWED_ORIGIN = "https://nexus.pages.dev" }
