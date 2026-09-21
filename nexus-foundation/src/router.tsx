@@ -3,12 +3,16 @@ import { LandingPage } from './pages/LandingPage';
 import { SignInPage } from './pages/SignInPage';
 import { SignUpPage } from './pages/SignUpPage';
 import { OAuthCallbackPage } from './pages/OAuthCallbackPage';
+import { SpotifyCallbackPage } from './pages/SpotifyCallbackPage';
 import { HomePage } from './pages/HomePage';
 import { ComingSoonPage } from './pages/ComingSoonPage';
+import { VideoHomePage } from './pages/VideoHomePage';
+import { WatchPage } from './pages/WatchPage';
+import { MusicPage } from './pages/MusicPage';
 import { AppShell } from './components/layout/AppShell';
 import { AuthGuard } from './components/auth/AuthGuard';
 
-function protectedRoute(path: string, element: React.ReactNode) {
+function protectedSection(path: string, children: any[]) {
   return {
     path,
     element: (
@@ -16,12 +20,7 @@ function protectedRoute(path: string, element: React.ReactNode) {
         <AppShell />
       </AuthGuard>
     ),
-    children: [
-      {
-        index: true,
-        element: element,
-      },
-    ],
+    children,
   };
 }
 
@@ -42,9 +41,42 @@ export const router = createBrowserRouter([
     path: '/auth/callback',
     element: <OAuthCallbackPage />,
   },
-  protectedRoute('/home', <HomePage />),
-  protectedRoute('/messages', <ComingSoonPage title="Tin nhắn" />),
-  protectedRoute('/music', <ComingSoonPage title="Âm nhạc" />),
-  protectedRoute('/watch', <ComingSoonPage title="Video" />),
-  protectedRoute('/settings', <ComingSoonPage title="Cài đặt" />),
+  {
+    path: '/auth/callback/spotify',
+    element: <SpotifyCallbackPage />,
+  },
+  protectedSection('/home', [
+    {
+      index: true,
+      element: <HomePage />,
+    },
+  ]),
+  protectedSection('/messages', [
+    {
+      index: true,
+      element: <ComingSoonPage title="Tin nhắn" />,
+    },
+  ]),
+  protectedSection('/music', [
+    {
+      index: true,
+      element: <MusicPage />,
+    },
+  ]),
+  protectedSection('/watch', [
+    {
+      index: true,
+      element: <VideoHomePage />,
+    },
+    {
+      path: ':videoid',
+      element: <WatchPage />,
+    },
+  ]),
+  protectedSection('/settings', [
+    {
+      index: true,
+      element: <ComingSoonPage title="Cài đặt" />,
+    },
+  ]),
 ]);
