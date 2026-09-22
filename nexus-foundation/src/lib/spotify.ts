@@ -138,3 +138,7 @@ export async function searchTracks(query: string): Promise<SpotifyTrackSummary[]
     albumImage: t.album.images?.[1]?.url ?? t.album.images?.[0]?.url,
   }))
 }
+export function disconnectSpotify() {
+  sessionStorage.removeItem('nexus_spotify_access_token')
+  sessionStorage.removeItem('nexus_spotify_token_expiry')
+}
