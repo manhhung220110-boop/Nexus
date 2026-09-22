@@ -25,7 +25,7 @@ export function AppShell() {
         <div className="flex items-center gap-3 text-sm text-[var(--text-2)]">
           {user?.email}
           <button
-            onClick={() => supabase.auth.signOut()}
+            onClick={() => { disconnectSpotify(); supabase.auth.signOut() }}
             className="flex items-center gap-1 rounded-control border border-[var(--border)] px-3 py-1.5 hover:bg-[var(--surface-2)]"
           >
             <LogOut size={16} /> Đăng xuất
