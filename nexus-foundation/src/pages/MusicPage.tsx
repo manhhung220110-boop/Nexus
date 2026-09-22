@@ -1,25 +1,24 @@
-import { useState } from 'react';
-import { startSpotifyLogin, isSpotifyConnected, searchTracks, type SpotifyTrackSummary } from '../lib/spotify';
+import { useState } from 'react'
+import { startSpotifyLogin, isSpotifyConnected, searchTracks, type SpotifyTrackSummary } from '../lib/spotify'
 
 export function MusicPage() {
-  // Đã xóa bỏ setConnected thừa ở đây để hết lỗi build
-  const [connected] = useState(isSpotifyConnected());
-  const [query, setQuery] = useState('');
-  const [tracks, setTracks] = useState<SpotifyTrackSummary[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [connected] = useState(isSpotifyConnected())
+  const [query, setQuery] = useState('')
+  const [tracks, setTracks] = useState<SpotifyTrackSummary[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (!query.trim()) return;
-    setLoading(true);
-    setError(null);
+    e.preventDefault()
+    if (!query.trim()) return
+    setLoading(true)
+    setError(null)
     try {
-      setTracks(await searchTracks(query));
+      setTracks(await searchTracks(query))
     } catch {
-      setError('Tìm nhạc thất bại, thử kết nối lại Spotify.');
+      setError('Tìm nhạc thất bại, thử kết nối lại Spotify.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
@@ -34,7 +33,7 @@ export function MusicPage() {
           Kết nối Spotify
         </button>
       </div>
-    );
+    )
   }
 
   return (
@@ -62,7 +61,7 @@ export function MusicPage() {
           <iframe
             key={t.id}
             title={t.name}
-            src={`https://spotify.com{t.id}`}
+            src={`https://open.spotify.com/embed/track/${t.id}`}
             width="100%"
             height="152"
             style={{ borderRadius: 12 }}
@@ -72,5 +71,5 @@ export function MusicPage() {
         ))}
       </div>
     </div>
-  );
+  )
 }
