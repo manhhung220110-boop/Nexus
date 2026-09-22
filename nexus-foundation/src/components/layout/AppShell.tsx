@@ -1,6 +1,7 @@
 import { Outlet, Link } from 'react-router-dom'
 import { Home, MessageCircle, Music, Play, Settings, LogOut } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { disconnectSpotify } from '../../lib/spotify'
 import { useAuth } from '../../hooks/useAuth'
 
 const NAV = [
