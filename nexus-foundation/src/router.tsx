@@ -42,7 +42,7 @@ export const router = createBrowserRouter([
     element: <OAuthCallbackPage />,
   },
   {
-    path: '/auth/callback/spotify',
+    path: '/spotify/callback',
     element: <SpotifyCallbackPage />,
   },
   protectedSection('/home', [
@@ -69,7 +69,7 @@ export const router = createBrowserRouter([
       element: <VideoHomePage />,
     },
     {
-      path: ':videoid',
+      path: ':videoId',
       element: <WatchPage />,
     },
   ]),
