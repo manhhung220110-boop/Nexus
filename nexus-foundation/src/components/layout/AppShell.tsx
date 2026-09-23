@@ -22,7 +22,7 @@ export function AppShell() {
 
   return (
     <div className="mx-auto grid min-h-screen max-w-[1600px] grid-cols-1 pb-16 lg:grid-cols-[260px_1fr_320px] lg:pb-0">
-      <header className="col-span-full sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface)]/90 px-4 py-3 backdrop-blur">
+      <header className="col-span-full sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface)]/90 px-4 backdrop-blur">
         <span className="bg-gradient-to-br from-nexus-blue to-nexus-purple bg-clip-text text-xl font-bold text-transparent">
           Nexus
         </span>
