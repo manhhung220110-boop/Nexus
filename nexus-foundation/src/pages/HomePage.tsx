@@ -12,6 +12,7 @@ interface CommentRow {
   content: string
   created_at: string
   author_id: string
+  media: PostMedia[] | null
   author: { display_name: string; avatar_url: string | null } | null
 }
 
@@ -40,7 +41,14 @@ const REACTIONS = [
   { type: 'angry', emoji: '😡' },
 ]
 
-const QUICK_EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '😢', '😮', '🙏', '❤️']
+const QUICK_EMOJIS = [
+  '😀', '😁', '😂', '🤣', '😊', '😍', '😘', '😜', '🤔', '😎',
+  '😢', '😭', '😡', '😱', '🥳', '😴', '🤗', '🙄', '😇', '🥰',
+  '👍', '👎', '👏', '🙏', '💪', '✌️', '🤝', '👋', '🤞', '👌',
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '💔', '💕', '💖',
+  '🔥', '✨', '🎉', '🎂', '🎁', '⭐', '🌟', '☀️', '🌙', '🌈',
+  '🐶', '🐱', '🐼', '🦄', '🐸', '🍕', '🍔', '☕', '🍰', '⚽',
+]
 
 function extractYouTubeId(url: string): string | null {
   const m = url.match(
@@ -54,6 +62,39 @@ function extractSpotifyTrackId(url: string): string | null {
   return m ? m[1] : null
 }
 
+function linkify(text: string) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g)
+  return parts.map((part, i) =>
+    part.match(/^https?:\/\//) ? (
+      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-nexus-blue underline break-all">
+        {part}
+      </a>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  )
+}
+
+async function uploadMedia(userId: string, file: File): Promise<PostMedia[]> {
+  const ext = file.name.split('.').pop()
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+  const { error } = await supabase.storage.from('post-media').upload(path, file)
+  if (error) return []
+  const { data } = supabase.storage.from('post-media').getPublicUrl(path)
+  const type = file.type.startsWith('video/') ? 'video' : 'image'
+  return [{ type, url: data.publicUrl }]
+}
+
+function deleteMediaFromUrl(url?: string | null) {
+  if (!url) return
+  const marker = '/object/public/post-media/'
+  const idx = url.indexOf(marker)
+  if (idx !== -1) {
+    const path = url.substring(idx + marker.length)
+    supabase.storage.from('post-media').remove([path])
+  }
+}
+
 export function HomePage() {
   const { user } = useAuth()
   const [content, setContent] = useState('')
@@ -63,6 +104,7 @@ export function HomePage() {
   const [spotifyLink, setSpotifyLink] = useState('')
   const [posting, setPosting] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [postEmojiOpen, setPostEmojiOpen] = useState(false)
   const [posts, setPosts] = useState<PostRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -71,6 +113,7 @@ export function HomePage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, CommentRow[]>>({})
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
+  const [commentFiles, setCommentFiles] = useState<Record<string, File | null>>({})
   const [emojiPickerOpen, setEmojiPickerOpen] = useState<Record<string, boolean>>({})
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editCommentContent, setEditCommentContent] = useState('')
@@ -113,13 +156,7 @@ export function HomePage() {
     let media: PostMedia[] = []
     if (file) {
       setUploading(true)
-      const ext = file.name.split('.').pop()
-      const path = `${user.id}/${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage.from('post-media').upload(path, file)
-      if (!uploadError) {
-        const { data } = supabase.storage.from('post-media').getPublicUrl(path)
-        media = [{ type: 'image', url: data.publicUrl }]
-      }
+      media = await uploadMedia(user.id, file)
       setUploading(false)
     }
 
@@ -142,15 +179,7 @@ export function HomePage() {
 
   async function deletePost(post: PostRow) {
     if (!window.confirm('Xóa bài viết này? Không thể hoàn tác.')) return
-    const url = post.media?.[0]?.url
-    if (url) {
-      const marker = '/object/public/post-media/'
-      const idx = url.indexOf(marker)
-      if (idx !== -1) {
-        const path = url.substring(idx + marker.length)
-        await supabase.storage.from('post-media').remove([path])
-      }
-    }
+    deleteMediaFromUrl(post.media?.[0]?.url)
     await supabase.from('posts').delete().eq('id', post.id)
     loadFeed()
   }
@@ -212,7 +241,9 @@ export function HomePage() {
   async function refreshComments(postId: string) {
     const { data } = await supabase
       .from('comments')
-      .select('id, content, created_at, author_id, author:profiles!comments_author_id_fkey(display_name, avatar_url)')
+      .select(
+        'id, content, created_at, author_id, media, author:profiles!comments_author_id_fkey(display_name, avatar_url)'
+      )
       .eq('post_id', postId)
       .order('created_at', { ascending: true })
     setCommentsByPost((prev) => ({ ...prev, [postId]: (data as any) ?? [] }))
@@ -228,9 +259,17 @@ export function HomePage() {
 
   async function addComment(postId: string) {
     const text = commentDrafts[postId]?.trim()
-    if (!text || !user) return
-    await supabase.from('comments').insert({ post_id: postId, author_id: user.id, content: text })
+    const cfile = commentFiles[postId]
+    if ((!text && !cfile) || !user) return
+
+    let media: PostMedia[] = []
+    if (cfile) {
+      media = await uploadMedia(user.id, cfile)
+    }
+
+    await supabase.from('comments').insert({ post_id: postId, author_id: user.id, content: text || '📷', media })
     setCommentDrafts((prev) => ({ ...prev, [postId]: '' }))
+    setCommentFiles((prev) => ({ ...prev, [postId]: null }))
     await refreshComments(postId)
     loadFeed()
   }
@@ -248,6 +287,8 @@ export function HomePage() {
 
   async function deleteComment(postId: string, commentId: string) {
     if (!window.confirm('Xóa bình luận này?')) return
+    const c = commentsByPost[postId]?.find((x) => x.id === commentId)
+    deleteMediaFromUrl(c?.media?.[0]?.url)
     await supabase.from('comments').delete().eq('id', commentId)
     await refreshComments(postId)
     loadFeed()
@@ -279,6 +320,33 @@ export function HomePage() {
           rows={3}
           className="w-full resize-none rounded-control border border-[var(--border)] px-3.5 py-2.5 outline-none focus:border-nexus-indigo focus:ring-2 focus:ring-nexus-indigo/25"
         />
+
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPostEmojiOpen((o) => !o)}
+            className="rounded-control border border-[var(--border)] px-2 py-1.5 text-sm hover:bg-[var(--surface-2)]"
+          >
+            😊
+          </button>
+          <span className="text-xs text-[var(--text-3)]">Thêm emoji</span>
+        </div>
+
+        {postEmojiOpen && (
+          <div className="mt-2 flex max-h-32 flex-wrap gap-1 overflow-y-auto rounded-control border border-[var(--border)] p-2">
+            {QUICK_EMOJIS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => setContent((c) => c + e)}
+                className="rounded-control px-1.5 py-0.5 text-lg hover:bg-[var(--surface-2)]"
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        )}
+
         <input
           value={youtubeLink}
           onChange={(e) => setYoutubeLink(e.target.value)}
@@ -291,13 +359,14 @@ export function HomePage() {
           placeholder="Dán link bài hát Spotify (không bắt buộc)"
           className="mt-2 w-full rounded-control border border-[var(--border)] px-3.5 py-2 text-sm outline-none focus:border-nexus-green focus:ring-2 focus:ring-nexus-green/25"
         />
+
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <label className="cursor-pointer text-sm text-[var(--text-2)] hover:text-nexus-indigo">
-              📷 {file ? file.name : 'Thêm ảnh'}
+              📎 {file ? file.name : 'Ảnh / GIF / Video'}
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 className="hidden"
               />
@@ -317,7 +386,7 @@ export function HomePage() {
             disabled={posting || uploading || (!content.trim() && !file && !youtubeLink.trim() && !spotifyLink.trim())}
             className="rounded-control bg-nexus-indigo px-5 py-2.5 font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            {uploading ? 'Đang tải ảnh…' : posting ? 'Đang đăng…' : 'Đăng'}
+            {uploading ? 'Đang tải lên…' : posting ? 'Đang đăng…' : 'Đăng'}
           </button>
         </div>
       </form>
@@ -393,14 +462,23 @@ export function HomePage() {
               </div>
             ) : (
               <>
-                {post.content && <p className="whitespace-pre-wrap text-[var(--text)]">{post.content}</p>}
-                {post.media?.[0]?.url && (
-                  <img
-                    src={post.media[0].url}
-                    alt=""
-                    className="mt-3 max-h-[420px] w-full rounded-control object-cover"
-                  />
+                {post.content && (
+                  <p className="whitespace-pre-wrap text-[var(--text)]">{linkify(post.content)}</p>
                 )}
+                {post.media?.[0]?.url &&
+                  (post.media[0].type === 'video' ? (
+                    <video
+                      src={post.media[0].url}
+                      controls
+                      className="mt-3 max-h-[420px] w-full rounded-control bg-black"
+                    />
+                  ) : (
+                    <img
+                      src={post.media[0].url}
+                      alt=""
+                      className="mt-3 max-h-[420px] w-full rounded-control object-cover"
+                    />
+                  ))}
                 {post.youtube_id && (
                   <div className="mt-3 aspect-video w-full overflow-hidden rounded-control bg-black">
                     <iframe
@@ -523,7 +601,14 @@ export function HomePage() {
                             <p className="text-xs font-medium text-[var(--text)]">
                               {c.author?.display_name ?? 'Người dùng'}
                             </p>
-                            <p className="text-sm text-[var(--text)]">{c.content}</p>
+                            <p className="text-sm text-[var(--text)]">{linkify(c.content)}</p>
+                            {c.media?.[0]?.url && (
+                              <img
+                                src={c.media[0].url}
+                                alt=""
+                                className="mt-1 max-h-52 rounded-control object-cover"
+                              />
+                            )}
                           </div>
                         )}
                         <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[var(--text-3)]">
@@ -548,7 +633,7 @@ export function HomePage() {
                 })}
 
                 {emojiPickerOpen[post.id] && (
-                  <div className="flex flex-wrap gap-1 rounded-control border border-[var(--border)] p-2">
+                  <div className="flex max-h-32 flex-wrap gap-1 overflow-y-auto rounded-control border border-[var(--border)] p-2">
                     {QUICK_EMOJIS.map((e) => (
                       <button
                         key={e}
@@ -568,6 +653,17 @@ export function HomePage() {
                   >
                     😊
                   </button>
+                  <label className="cursor-pointer rounded-control border border-[var(--border)] px-2 py-1.5 text-sm hover:bg-[var(--surface-2)]">
+                    📎
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) =>
+                        setCommentFiles((prev) => ({ ...prev, [post.id]: e.target.files?.[0] ?? null }))
+                      }
+                      className="hidden"
+                    />
+                  </label>
                   <input
                     value={commentDrafts[post.id] ?? ''}
                     onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [post.id]: e.target.value }))}
@@ -582,6 +678,9 @@ export function HomePage() {
                     Gửi
                   </button>
                 </div>
+                {commentFiles[post.id] && (
+                  <p className="text-xs text-[var(--text-3)]">Đã chọn: {commentFiles[post.id]?.name}</p>
+                )}
               </div>
             )}
           </div>
