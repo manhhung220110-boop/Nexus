@@ -22,10 +22,13 @@ interface PostRow {
   author_id: string
   media: PostMedia[] | null
   visibility: string
+  youtube_id: string | null
+  spotify_uri: string | null
   author: { display_name: string; avatar_url: string | null } | null
   post_reactions: { user_id: string; type: string }[]
   comments: { id: string }[]
   saves: { user_id: string }[]
+  post_views: { viewer_id: string }[]
 }
 
 const REACTIONS = [
@@ -37,11 +40,27 @@ const REACTIONS = [
   { type: 'angry', emoji: '😡' },
 ]
 
+const QUICK_EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '😢', '😮', '🙏', '❤️']
+
+function extractYouTubeId(url: string): string | null {
+  const m = url.match(
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/
+  )
+  return m ? m[1] : null
+}
+
+function extractSpotifyTrackId(url: string): string | null {
+  const m = url.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/)
+  return m ? m[1] : null
+}
+
 export function HomePage() {
   const { user } = useAuth()
   const [content, setContent] = useState('')
   const [visibility, setVisibility] = useState('public')
   const [file, setFile] = useState<File | null>(null)
+  const [youtubeLink, setYoutubeLink] = useState('')
+  const [spotifyLink, setSpotifyLink] = useState('')
   const [posting, setPosting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [posts, setPosts] = useState<PostRow[]>([])
@@ -52,21 +71,32 @@ export function HomePage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, CommentRow[]>>({})
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState<Record<string, boolean>>({})
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editCommentContent, setEditCommentContent] = useState('')
 
   async function loadFeed() {
     setLoading(true)
     const { data, error } = await supabase
       .from('posts')
       .select(
-        'id, content, created_at, author_id, media, visibility, author:profiles!posts_author_id_fkey(display_name, avatar_url), post_reactions(user_id, type), comments(id), saves(user_id)'
+        'id, content, created_at, author_id, media, visibility, youtube_id, spotify_uri, author:profiles!posts_author_id_fkey(display_name, avatar_url), post_reactions(user_id, type), comments(id), saves(user_id), post_views(viewer_id)'
       )
       .order('created_at', { ascending: false })
       .limit(20)
     if (error) {
       setError('Không tải được bảng tin.')
     } else {
-      setPosts((data as any) ?? [])
+      const rows: PostRow[] = (data as any) ?? []
+      setPosts(rows)
       setError(null)
+      if (user) {
+        rows.forEach((p) => {
+          supabase
+            .from('post_views')
+            .upsert({ post_id: p.id, viewer_id: user.id }, { onConflict: 'post_id,viewer_id', ignoreDuplicates: true })
+        })
+      }
     }
     setLoading(false)
   }
@@ -77,7 +107,7 @@ export function HomePage() {
 
   async function handlePost(e: React.FormEvent) {
     e.preventDefault()
-    if ((!content.trim() && !file) || !user) return
+    if ((!content.trim() && !file && !youtubeLink.trim() && !spotifyLink.trim()) || !user) return
     setPosting(true)
 
     let media: PostMedia[] = []
@@ -93,19 +123,35 @@ export function HomePage() {
       setUploading(false)
     }
 
-    const { error } = await supabase.from('posts').insert({ author_id: user.id, content, media, visibility })
+    const youtube_id = youtubeLink.trim() ? extractYouTubeId(youtubeLink.trim()) : null
+    const spotify_uri = spotifyLink.trim() ? extractSpotifyTrackId(spotifyLink.trim()) : null
+
+    const { error } = await supabase
+      .from('posts')
+      .insert({ author_id: user.id, content, media, visibility, youtube_id, spotify_uri })
     setPosting(false)
     if (!error) {
       setContent('')
       setFile(null)
+      setYoutubeLink('')
+      setSpotifyLink('')
       setVisibility('public')
       loadFeed()
     }
   }
 
-  async function deletePost(postId: string) {
+  async function deletePost(post: PostRow) {
     if (!window.confirm('Xóa bài viết này? Không thể hoàn tác.')) return
-    await supabase.from('posts').delete().eq('id', postId)
+    const url = post.media?.[0]?.url
+    if (url) {
+      const marker = '/object/public/post-media/'
+      const idx = url.indexOf(marker)
+      if (idx !== -1) {
+        const path = url.substring(idx + marker.length)
+        await supabase.storage.from('post-media').remove([path])
+      }
+    }
+    await supabase.from('posts').delete().eq('id', post.id)
     loadFeed()
   }
 
@@ -163,16 +209,20 @@ export function HomePage() {
     alert('Đã gửi báo cáo, cảm ơn bạn.')
   }
 
+  async function refreshComments(postId: string) {
+    const { data } = await supabase
+      .from('comments')
+      .select('id, content, created_at, author_id, author:profiles!comments_author_id_fkey(display_name, avatar_url)')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true })
+    setCommentsByPost((prev) => ({ ...prev, [postId]: (data as any) ?? [] }))
+  }
+
   async function toggleComments(postId: string) {
     const isOpen = expanded[postId]
     setExpanded((prev) => ({ ...prev, [postId]: !isOpen }))
     if (!isOpen && !commentsByPost[postId]) {
-      const { data } = await supabase
-        .from('comments')
-        .select('id, content, created_at, author_id, author:profiles!comments_author_id_fkey(display_name, avatar_url)')
-        .eq('post_id', postId)
-        .order('created_at', { ascending: true })
-      setCommentsByPost((prev) => ({ ...prev, [postId]: (data as any) ?? [] }))
+      await refreshComments(postId)
     }
   }
 
@@ -181,13 +231,34 @@ export function HomePage() {
     if (!text || !user) return
     await supabase.from('comments').insert({ post_id: postId, author_id: user.id, content: text })
     setCommentDrafts((prev) => ({ ...prev, [postId]: '' }))
-    const { data } = await supabase
-      .from('comments')
-      .select('id, content, created_at, author_id, author:profiles!comments_author_id_fkey(display_name, avatar_url)')
-      .eq('post_id', postId)
-      .order('created_at', { ascending: true })
-    setCommentsByPost((prev) => ({ ...prev, [postId]: (data as any) ?? [] }))
+    await refreshComments(postId)
     loadFeed()
+  }
+
+  function startEditComment(c: CommentRow) {
+    setEditingCommentId(c.id)
+    setEditCommentContent(c.content)
+  }
+
+  async function saveEditComment(postId: string, commentId: string) {
+    await supabase.from('comments').update({ content: editCommentContent }).eq('id', commentId)
+    setEditingCommentId(null)
+    await refreshComments(postId)
+  }
+
+  async function deleteComment(postId: string, commentId: string) {
+    if (!window.confirm('Xóa bình luận này?')) return
+    await supabase.from('comments').delete().eq('id', commentId)
+    await refreshComments(postId)
+    loadFeed()
+  }
+
+  function toggleEmojiPicker(postId: string) {
+    setEmojiPickerOpen((prev) => ({ ...prev, [postId]: !prev[postId] }))
+  }
+
+  function addEmoji(postId: string, emoji: string) {
+    setCommentDrafts((prev) => ({ ...prev, [postId]: (prev[postId] ?? '') + emoji }))
   }
 
   function reactionCounts(reactions: { type: string }[]) {
@@ -207,6 +278,18 @@ export function HomePage() {
           placeholder="Bạn đang nghĩ gì?"
           rows={3}
           className="w-full resize-none rounded-control border border-[var(--border)] px-3.5 py-2.5 outline-none focus:border-nexus-indigo focus:ring-2 focus:ring-nexus-indigo/25"
+        />
+        <input
+          value={youtubeLink}
+          onChange={(e) => setYoutubeLink(e.target.value)}
+          placeholder="Dán link YouTube (không bắt buộc)"
+          className="mt-2 w-full rounded-control border border-[var(--border)] px-3.5 py-2 text-sm outline-none focus:border-nexus-coral focus:ring-2 focus:ring-nexus-coral/25"
+        />
+        <input
+          value={spotifyLink}
+          onChange={(e) => setSpotifyLink(e.target.value)}
+          placeholder="Dán link bài hát Spotify (không bắt buộc)"
+          className="mt-2 w-full rounded-control border border-[var(--border)] px-3.5 py-2 text-sm outline-none focus:border-nexus-green focus:ring-2 focus:ring-nexus-green/25"
         />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
@@ -231,7 +314,7 @@ export function HomePage() {
           </div>
           <button
             type="submit"
-            disabled={posting || uploading || (!content.trim() && !file)}
+            disabled={posting || uploading || (!content.trim() && !file && !youtubeLink.trim() && !spotifyLink.trim())}
             className="rounded-control bg-nexus-indigo px-5 py-2.5 font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
             {uploading ? 'Đang tải ảnh…' : posting ? 'Đang đăng…' : 'Đăng'}
@@ -268,7 +351,8 @@ export function HomePage() {
                   <p className="font-medium text-[var(--text)]">{post.author?.display_name ?? 'Người dùng'}</p>
                   <p className="text-xs text-[var(--text-3)]">
                     {new Date(post.created_at).toLocaleString('vi-VN')} ·{' '}
-                    {post.visibility === 'public' ? '🌍' : post.visibility === 'friends' ? '👥' : '🔒'}
+                    {post.visibility === 'public' ? '🌍' : post.visibility === 'friends' ? '👥' : '🔒'} · 👁{' '}
+                    {post.post_views.length}
                   </p>
                 </div>
               </div>
@@ -277,7 +361,7 @@ export function HomePage() {
                   <button onClick={() => startEdit(post)} className="text-[var(--text-2)] hover:text-nexus-indigo">
                     Sửa
                   </button>
-                  <button onClick={() => deletePost(post.id)} className="text-nexus-coral hover:underline">
+                  <button onClick={() => deletePost(post)} className="text-nexus-coral hover:underline">
                     Xóa
                   </button>
                 </div>
@@ -315,6 +399,29 @@ export function HomePage() {
                     src={post.media[0].url}
                     alt=""
                     className="mt-3 max-h-[420px] w-full rounded-control object-cover"
+                  />
+                )}
+                {post.youtube_id && (
+                  <div className="mt-3 aspect-video w-full overflow-hidden rounded-control bg-black">
+                    <iframe
+                      src={`https://www.youtube.com/embed/${post.youtube_id}`}
+                      title="YouTube video"
+                      className="h-full w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                )}
+                {post.spotify_uri && (
+                  <iframe
+                    title="Spotify track"
+                    src={`https://open.spotify.com/embed/track/${post.spotify_uri}`}
+                    width="100%"
+                    height="152"
+                    className="mt-3"
+                    style={{ borderRadius: 12 }}
+                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                    loading="lazy"
                   />
                 )}
               </>
@@ -376,22 +483,91 @@ export function HomePage() {
 
             {expanded[post.id] && (
               <div className="mt-3 space-y-3 border-t border-[var(--border)] pt-3">
-                {(commentsByPost[post.id] ?? []).map((c) => (
-                  <div key={c.id} className="flex items-start gap-2">
-                    {c.author?.avatar_url ? (
-                      <img src={c.author.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" />
-                    ) : (
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--surface-2)] text-xs text-[var(--text-3)]">
-                        ?
+                {(commentsByPost[post.id] ?? []).map((c) => {
+                  const isCommentAuthor = user?.id === c.author_id
+                  const isEditingComment = editingCommentId === c.id
+                  return (
+                    <div key={c.id} className="flex items-start gap-2">
+                      {c.author?.avatar_url ? (
+                        <img src={c.author.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                      ) : (
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--surface-2)] text-xs text-[var(--text-3)]">
+                          ?
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        {isEditingComment ? (
+                          <div className="space-y-1">
+                            <input
+                              value={editCommentContent}
+                              onChange={(e) => setEditCommentContent(e.target.value)}
+                              className="w-full rounded-control border border-[var(--border)] px-2 py-1 text-sm outline-none focus:border-nexus-indigo"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => saveEditComment(post.id, c.id)}
+                                className="text-xs font-medium text-nexus-indigo"
+                              >
+                                Lưu
+                              </button>
+                              <button
+                                onClick={() => setEditingCommentId(null)}
+                                className="text-xs text-[var(--text-2)]"
+                              >
+                                Hủy
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-control bg-[var(--surface-2)] px-3 py-1.5">
+                            <p className="text-xs font-medium text-[var(--text)]">
+                              {c.author?.display_name ?? 'Người dùng'}
+                            </p>
+                            <p className="text-sm text-[var(--text)]">{c.content}</p>
+                          </div>
+                        )}
+                        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[var(--text-3)]">
+                          <span>{new Date(c.created_at).toLocaleString('vi-VN')}</span>
+                          {isCommentAuthor && !isEditingComment && (
+                            <>
+                              <button onClick={() => startEditComment(c)} className="hover:text-nexus-indigo">
+                                Sửa
+                              </button>
+                              <button
+                                onClick={() => deleteComment(post.id, c.id)}
+                                className="hover:text-nexus-coral"
+                              >
+                                Xóa
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    )}
-                    <div className="rounded-control bg-[var(--surface-2)] px-3 py-1.5">
-                      <p className="text-xs font-medium text-[var(--text)]">{c.author?.display_name ?? 'Người dùng'}</p>
-                      <p className="text-sm text-[var(--text)]">{c.content}</p>
                     </div>
+                  )
+                })}
+
+                {emojiPickerOpen[post.id] && (
+                  <div className="flex flex-wrap gap-1 rounded-control border border-[var(--border)] p-2">
+                    {QUICK_EMOJIS.map((e) => (
+                      <button
+                        key={e}
+                        onClick={() => addEmoji(post.id, e)}
+                        className="rounded-control px-1.5 py-0.5 text-lg hover:bg-[var(--surface-2)]"
+                      >
+                        {e}
+                      </button>
+                    ))}
                   </div>
-                ))}
-                <div className="flex gap-2">
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => toggleEmojiPicker(post.id)}
+                    className="rounded-control border border-[var(--border)] px-2 py-1.5 text-sm hover:bg-[var(--surface-2)]"
+                  >
+                    😊
+                  </button>
                   <input
                     value={commentDrafts[post.id] ?? ''}
                     onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [post.id]: e.target.value }))}
