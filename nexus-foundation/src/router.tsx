@@ -5,7 +5,8 @@ import { SignUpPage } from './pages/SignUpPage'
 import { OAuthCallbackPage } from './pages/OAuthCallbackPage'
 import { SpotifyCallbackPage } from './pages/SpotifyCallbackPage'
 import { HomePage } from './pages/HomePage'
-import { ComingSoonPage } from './pages/ComingSoonPage'
+import { MessagesPage } from './pages/MessagesPage'
+import { ConversationPage } from './pages/ConversationPage'
 import { VideoHomePage } from './pages/VideoHomePage'
 import { WatchPage } from './pages/WatchPage'
 import { MusicPage } from './pages/MusicPage'
@@ -32,7 +33,10 @@ export const router = createBrowserRouter([
   { path: '/auth/callback', element: <OAuthCallbackPage /> },
   { path: '/spotify/callback', element: <SpotifyCallbackPage /> },
   protectedSection('/home', [{ index: true, element: <HomePage /> }]),
-  protectedSection('/messages', [{ index: true, element: <ComingSoonPage title="Tin nhắn" /> }]),
+  protectedSection('/messages', [
+    { index: true, element: <MessagesPage /> },
+    { path: ':conversationId', element: <ConversationPage /> },
+  ]),
   protectedSection('/music', [{ index: true, element: <MusicPage /> }]),
   protectedSection('/watch', [
     { index: true, element: <VideoHomePage /> },
