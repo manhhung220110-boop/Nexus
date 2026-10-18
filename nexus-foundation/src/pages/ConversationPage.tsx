@@ -34,9 +34,11 @@ export function ConversationPage() {
   const [content, setContent] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [title, setTitle] = useState('Tin nhắn')
   const [subtitle, setSubtitle] = useState<string | null>(null)
+  const [infoError, setInfoError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [reactionsByMsg, setReactionsByMsg] = useState<Record<string, { user_id: string; emoji: string }[]>>({})
@@ -46,7 +48,15 @@ export function ConversationPage() {
 
   async function loadInfo() {
     if (!conversationId || !user) return
-    const { data: conv } = await supabase.from('conversations').select('type, name').eq('id', conversationId).single()
+    const { data: conv, error: convErr } = await supabase
+      .from('conversations')
+      .select('type, name')
+      .eq('id', conversationId)
+      .single()
+    if (convErr) {
+      setInfoError(convErr.message)
+      return
+    }
     if (conv?.type === 'group') {
       setTitle(conv.name ?? 'Nhóm')
       const { data: members } = await supabase
@@ -55,12 +65,13 @@ export function ConversationPage() {
         .eq('conversation_id', conversationId)
       setSubtitle(`${members?.length ?? 0} thành viên`)
     } else {
-      const { data: other } = await supabase
+      const { data: other, error: otherErr } = await supabase
         .from('conversation_members')
         .select('profiles(display_name)')
         .eq('conversation_id', conversationId)
         .neq('user_id', user.id)
-        .single()
+        .maybeSingle()
+      if (otherErr) setInfoError(otherErr.message)
       setTitle((other as any)?.profiles?.display_name ?? 'Người dùng')
       setSubtitle(null)
     }
@@ -140,6 +151,7 @@ export function ConversationPage() {
     e.preventDefault()
     if ((!content.trim() && !file) || !user || !conversationId) return
     setSending(true)
+    setSendError(null)
 
     let media: any[] = []
     if (file) {
@@ -147,14 +159,18 @@ export function ConversationPage() {
       if (m) media = [m]
     }
 
-    await supabase.from('messages').insert({
+    const { error } = await supabase.from('messages').insert({
       conversation_id: conversationId,
       sender_id: user.id,
       content: content.trim() || null,
       media,
     })
-    setContent('')
-    setFile(null)
+    if (error) {
+      setSendError(error.message)
+    } else {
+      setContent('')
+      setFile(null)
+    }
     setSending(false)
     loadMessages()
   }
@@ -206,6 +222,7 @@ export function ConversationPage() {
           <p className="font-medium text-[var(--text)]">{title}</p>
           {subtitle && <p className="text-xs text-[var(--text-3)]">{subtitle}</p>}
           {isTyping && <p className="text-xs text-nexus-cyan">Đang nhập…</p>}
+          {infoError && <p className="text-xs text-nexus-coral">{infoError}</p>}
         </div>
       </div>
 
@@ -332,6 +349,7 @@ export function ConversationPage() {
             ))}
           </div>
         )}
+        {sendError && <p className="mb-2 text-xs text-nexus-coral">{sendError}</p>}
         <div className="flex items-center gap-2">
           <button
             type="button"
