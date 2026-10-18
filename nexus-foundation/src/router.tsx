@@ -7,6 +7,7 @@ import { SpotifyCallbackPage } from './pages/SpotifyCallbackPage'
 import { HomePage } from './pages/HomePage'
 import { MessagesPage } from './pages/MessagesPage'
 import { ConversationPage } from './pages/ConversationPage'
+import { FriendsPage } from './pages/FriendsPage'
 import { VideoHomePage } from './pages/VideoHomePage'
 import { WatchPage } from './pages/WatchPage'
 import { MusicPage } from './pages/MusicPage'
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
     { index: true, element: <MessagesPage /> },
     { path: ':conversationId', element: <ConversationPage /> },
   ]),
+  protectedSection('/friends', [{ index: true, element: <FriendsPage /> }]),
   protectedSection('/music', [{ index: true, element: <MusicPage /> }]),
   protectedSection('/watch', [
     { index: true, element: <VideoHomePage /> },
