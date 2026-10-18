@@ -1,5 +1,5 @@
 import { Outlet, Link } from 'react-router-dom'
-import { Home, MessageCircle, Music, Play, Settings, LogOut } from 'lucide-react'
+import { Home, MessageCircle, Music, Play, Settings, LogOut, Users } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { disconnectSpotify } from '../../lib/spotify'
@@ -7,6 +7,7 @@ import { disconnectSpotify } from '../../lib/spotify'
 const NAV = [
   { to: '/home', label: 'Bảng tin', icon: Home },
   { to: '/messages', label: 'Tin nhắn', icon: MessageCircle },
+  { to: '/friends', label: 'Bạn bè', icon: Users },
   { to: '/music', label: 'Âm nhạc', icon: Music },
   { to: '/watch', label: 'Video', icon: Play },
   { to: '/settings', label: 'Cài đặt', icon: Settings },
