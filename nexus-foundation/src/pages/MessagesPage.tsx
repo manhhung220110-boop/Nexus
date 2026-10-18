@@ -122,6 +122,10 @@ export function MessagesPage() {
 
   async function startDM(otherUserId: string) {
     const { data, error } = await supabase.rpc('create_dm_conversation', { other_user_id: otherUserId })
+    if (error) {
+      alert(error.message)
+      return
+    }
     if (!error && data) navigate(`/messages/${data}`)
   }
 
@@ -135,6 +139,10 @@ export function MessagesPage() {
       group_name: groupName.trim(),
       member_ids: groupMembers.map((m) => m.id),
     })
+    if (error) {
+      alert(error.message)
+      return
+    }
     if (!error && data) navigate(`/messages/${data}`)
   }
 
